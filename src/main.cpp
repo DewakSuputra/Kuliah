@@ -1,97 +1,97 @@
-#include <Arduino.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-const uint8_t pin[3] = {11, 10, 9}; // merah, kuning, hijau
-
-const byte MATI = 0x0;
-const byte HIDUP = 0x1;
-
-const uint8_t batas_kecerahan[3] = {50, 50, 50};
-
-int16_t kecerahan[3] = {0, 0, 0};
-
-bool arah[3] = {HIDUP, HIDUP, HIDUP};
-
-unsigned long last_on[3] = {0, 0, 0};
-
+// Mengirimkan sensor DS18B20 ke pin A1
 OneWire oneWire(4);
-DallasTemperature SENSOR_SUHU(&oneWire);
+DallasTemperature sensors(&oneWire);
 
-void lampuDisco();
-float bacaSuhu(const char metric);
-void cetakSuhu();
+int redLedPin = 11;
+int yellowLedPin = 10;
+int blueLedPin = 9;
 
-void setup(){
-  Serial.begin(115200);
-  SENSOR_SUHU.begin();
+bool isRedBlinking = false;
+bool isYellowBlinking = false;
+bool isBlueBlinking = false;
 
-  pinMode(pin[0], OUTPUT);
-  pinMode(pin[1], OUTPUT);
-  pinMode(pin[2], OUTPUT);
+unsigned long previousMillis = 0;
+const long interval = 1000; // Interval waktu untuk efek kedip (1 detik)
 
+void setup() {
+  sensors.begin();
+  pinMode(redLedPin, OUTPUT);
+  pinMode(yellowLedPin, OUTPUT);
+  pinMode(blueLedPin, OUTPUT);
+  Serial.begin(9600);
 }
 
-void loop(){
-  //lampuDisco();
-  cetakSuhu();
-}
+void loop() {
+  sensors.requestTemperatures(); 
 
-float bacaSuhu(const char metric){
-  SENSOR_SUHU.requestTemperatures(); 
-  float celcius = SENSOR_SUHU.getTempCByIndex(0);
+  float temperatureC = sensors.getTempCByIndex(0);
 
-  if(metric == 'C'){
-    return celcius;
-  }
-  else{
-    return 0;
-  } 
-}
-
-unsigned long cetakSuhu_timer = 0;
-void cetakSuhu(){
-  unsigned long now = millis();
-  if( now - cetakSuhu_timer > 5000 ){
-    Serial.print("Celcius: ");
-    Serial.print(bacaSuhu('C'));
-    Serial.print(" - ");
-    Serial.print("Fahrenheit: ");
-    Serial.print(bacaSuhu('C'));
-    // Reamur, Kelvin
-    Serial.println();
-    
-    cetakSuhu_timer = now; //reset timer
-  }
-}
-
-void lampuDisco()
-{
-  unsigned long now = millis();
-  
-  for(uint8_t i = 0; i < 3; i++)
-  {
-    if(now - last_on[i] >= 25)
-    {
-      if(arah[i] == HIDUP)
-      {
-        analogWrite(pin[i], kecerahan[i]++);
+  if (temperatureC >= 40.0 && temperatureC <= 45.0) {
+    // Rentang suhu ruangan server 40°C hingga 45°C: Nyalakan lampu Merah
+    analogWrite(redLedPin, map(temperatureC, 40, 45, 0, 255));
+    digitalWrite(yellowLedPin, LOW);
+    digitalWrite(blueLedPin, LOW);
+    // Efek kedip pada lampu Merah
+    if (millis() - previousMillis >= interval) {
+      previousMillis = millis();
+      if (isRedBlinking) {
+        analogWrite(redLedPin, 0); // Matikan lampu Merah
+      } else {
+        analogWrite(redLedPin, map(temperatureC, 40, 45, 0, 255)); // Nyalakan lampu Merah
       }
-      else if(arah[i] == MATI)
-      {
-        analogWrite(pin[i], kecerahan[i]--);
-      }
-      
-      if(kecerahan[i] >= batas_kecerahan[i])
-      {
-        arah[i] = MATI;
-      }
-      else if(kecerahan[i] <= 0)
-      {
-        arah[i] = HIDUP;
-      }
-      
-      last_on[i] = now;
+      isRedBlinking = !isRedBlinking; // Ubah status efek kedip
     }
+  } else if (temperatureC >= 35.0 && temperatureC < 40.0) {
+    // Rentang suhu ruangan server 35°C hingga 40°C: Nyalakan lampu Kuning
+    digitalWrite(redLedPin, LOW);
+    digitalWrite(blueLedPin, LOW);
+    // Efek fading pada lampu Kuning
+    int brightness = map(temperatureC, 35, 40, 255, 0);
+    analogWrite(yellowLedPin, brightness);
+    // Efek kedip pada lampu Kuning
+    if (millis() - previousMillis >= interval) {
+      previousMillis = millis();
+      if (isYellowBlinking) {
+        analogWrite(yellowLedPin, 0); // Matikan lampu Kuning
+      } else {
+        analogWrite(yellowLedPin, brightness); // Nyalakan lampu Kuning
+      }
+      isYellowBlinking = !isYellowBlinking; // Ubah status efek kedip
+    }
+  } else if (temperatureC < 35.0) {
+    // Suhu ruangan server kurang dari 35°C: Nyalakan lampu Biru
+    digitalWrite(redLedPin, LOW);
+    digitalWrite(yellowLedPin, LOW);
+    // Efek fading pada lampu Biru
+    int brightness = map(temperatureC, 0, 30, 0, 255);
+    analogWrite(blueLedPin, brightness);
+    // Efek kedip pada lampu Biru
+    if (millis() - previousMillis >= interval) {
+      previousMillis = millis();
+      if (isBlueBlinking) {
+        analogWrite(blueLedPin, 0); // Matikan lampu Biru
+      } else {
+        analogWrite(blueLedPin, brightness); // Nyalakan lampu Biru
+      }
+      isBlueBlinking = !isBlueBlinking; // Ubah status efek kedip
+    }
+  } else {
+    // Suhu di atas 30°C: Matikan semua lampu
+    digitalWrite(redLedPin, LOW);
+    digitalWrite(yellowLedPin, LOW);
+    digitalWrite(blueLedPin, LOW);
+    // Hentikan efek kedip pada semua lampu
+    isRedBlinking = false;
+    isYellowBlinking = false;
+    isBlueBlinking = false;
   }
+
+  Serial.print("Suhu (Celsius): ");
+  Serial.print(temperatureC);
+  Serial.println(" °C");
+
+  delay(1000);
 }
