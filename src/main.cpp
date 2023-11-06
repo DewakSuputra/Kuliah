@@ -1,7 +1,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-// Mengirimkan sensor DS18B20 ke pin A1
+// Mengirimkan sensor DS18B20 ke pin 4
 OneWire oneWire(4);
 DallasTemperature sensors(&oneWire);
 
